@@ -65,7 +65,7 @@ const errorHtmlUrl = 'https://1345695.github.io/index-404-html/';
 import wasmModule from './protocol.wasm';
 const instance = new WebAssembly.Instance(wasmModule);
 const {
-    memory, getUuidPtr, getResultPtr, getDataPtr, getHttpAuthPtr, getSocks5AuthPtr, setHttpAuthLenWasm, setSocks5AuthLenWasm, setSniSniffWasm, parseProtocolWasm, parseUrlWasm,
+    memory, getUuidPtr, getResultPtr, getDataPtr, getHttpAuthPtr, getSocks5AuthPtr, parseProtocolWasm, parseUrlWasm,
     initCredentialsWasm, getTemplateWasm, getSecretStringWasm
 } = instance.exports;
 const wasmMem = new Uint8Array(memory.buffer);
@@ -102,13 +102,13 @@ const initializeWasm = (env) => {
     if (user && pass) {
         const authBytes = textEncoder.encode(btoa(`${user}:${pass}`));
         wasmMem.set(authBytes, getHttpAuthPtr());
-        setHttpAuthLenWasm(authBytes.length);
+        wasmRes[2] = authBytes.length;
         const userBytes = textEncoder.encode(user);
         const passBytes = textEncoder.encode(pass);
         const socks5Pkg = new Uint8Array(3 + userBytes.length + passBytes.length);
         socks5Pkg[0] = 1, socks5Pkg[1] = userBytes.length, socks5Pkg.set(userBytes, 2), socks5Pkg[2 + userBytes.length] = passBytes.length, socks5Pkg.set(passBytes, 3 + userBytes.length);
         wasmMem.set(socks5Pkg, getSocks5AuthPtr());
-        setSocks5AuthLenWasm(socks5Pkg.length);
+        wasmRes[3] = socks5Pkg.length;
     }
     cachedTemplates = new Array(9);
     const subUuid = uuid || crypto.randomUUID();
