@@ -1356,7 +1356,7 @@ const extractSniBytes = (data) => {
                 const nameType = data[sniOffset], nameLen = (data[sniOffset + 1] << 8) | data[sniOffset + 2];
                 sniOffset += 3;
                 if (nameType === 0x00) {
-                    if (sniOffset + nameLen <= sniEnd) return {sni: data.subarray(sniOffset, sniOffset + nameLen)};
+                    if (sniOffset + nameLen <= sniEnd) return {offset: sniOffset, len: nameLen};
                     return {needMore: true};
                 }
                 sniOffset += nameLen;
@@ -1718,19 +1718,19 @@ const handleSession = async (chunk, state, request, writable, close, isEarlyData
                 const decryptCtx = await createSsAeadCtx(chunk.subarray(0, 16)), plain = await ssAeadDecryptFeed(decryptCtx, chunk.subarray(16)), plainLen = plain.length;
                 if (plainLen > 0) {
                     let addrType = plain[0];
-                    const addrLen = addrType === 3 ? (plainLen > 1 ? plain[1] : null) : addrType === 1 ? 4 : addrType === 4 ? 16 : -1;
+                    let addrLen = addrType === 3 ? (plainLen > 1 ? plain[1] : null) : addrType === 1 ? 4 : addrType === 4 ? 16 : -1;
                     if (addrLen !== null && addrLen > 0) {
-                        const addrOffset = addrType === 3 ? 2 : 1, dataOffset = addrOffset + addrLen + 2;
+                        let addrOffset = addrType === 3 ? 2 : 1;
+                        const dataOffset = addrOffset + addrLen + 2;
                         if (plainLen >= dataOffset) {
                             const portOffset = dataOffset - 2, port = (plain[portOffset] << 8) | plain[portOffset + 1];
-                            let addrBytes = plain.subarray(addrOffset, addrOffset + addrLen);
                             payload = plain.subarray(dataOffset);
                             if (enableSniSniff && addrType !== 3 && payload.length > 0) {
                                 const sniRes = extractSniBytes(payload);
                                 if (sniRes?.needMore && allowNeedMore) return state.needMore = true;
-                                sniRes?.sni && (addrType = 3, addrBytes = sniRes.sni);
+                                sniRes?.len && (addrType = 3, addrOffset = dataOffset + sniRes.offset, addrLen = sniRes.len);
                             }
-                            parsedRequest = {addrType, addrBytes, dataOffset, port, isDns: port === 53};
+                            parsedRequest = {addrType, addrBytes: plain.subarray(addrOffset, addrOffset + addrLen), dataOffset, port, isDns: port === 53};
                             const encryptCtx = await createSsAeadCtx();
                             isSs = true, state.ssInbound = decryptCtx, state.ssOutbound = encryptCtx, state.ssResponseSalt = encryptCtx.salt;
                         }
