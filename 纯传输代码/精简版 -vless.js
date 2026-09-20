@@ -6,21 +6,15 @@ const maxChunkLen = 64 * 1024;
 const flushTime = 3;
 const concurrency = 4;
 const finallyProxyHost = 'proxy.zjcloud.us.ci';
-let currentColo = null;
-const getCurrentColo = async () => {
+const traceUrl = 'https://cp.cloudflare.com/cdn-cgi/trace', proxySuffix = '.proxy.zjcloud.us.ci';
+let currentColo = null, pendingPromise = null;
+const getCurrentColo = () => {
     if (currentColo !== null) return currentColo;
-    try {
-        const text = await fetch('https://cp.cloudflare.com/cdn-cgi/trace', {
-            headers: {'User-Agent': 'Mozilla/5.0'}
-        }).then(r => r.text());
-        const i = text.indexOf('colo=');
-        const colo = i >= 0 ? text.slice(i + 5, i + 8) : '';
-        currentColo = colo ? `${colo.toLowerCase()}.proxy.zjcloud.us.ci` : finallyProxyHost;
-        return currentColo;
-    } catch {
-        currentColo = finallyProxyHost;
-        return currentColo;
-    }
+    if (pendingPromise !== null) return pendingPromise;
+    return pendingPromise = fetch(traceUrl, {signal: AbortSignal.timeout(10)}).then(r => r.text()).then(t => {
+        const i = t.indexOf("colo=");
+        return currentColo = i !== -1 ? t.slice(i + 5, i + 8) + proxySuffix : finallyProxyHost
+    }).catch(() => currentColo = finallyProxyHost).finally(() => {pendingPromise = null})
 };
 const _h = c => (c > 64 ? (c & 7) + 9 : c & 15);
 const _b = p => (_h(uuid.charCodeAt(p)) << 4) | _h(uuid.charCodeAt(p + 1));

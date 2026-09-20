@@ -42,21 +42,15 @@ const dohNatEndpoints = ['https://cloudflare-dns.com/dns-query', 'https://dns.go
 const finallyProxyHost = 'proxy.zjcloud.us.ci';//兜底proxyip
 // 订阅和面板使用的优选ip地址，可支持ip:port#name格式
 const ipListAll = ["172.64.154.125", "104.18.39.123", "172.64.145.18", "104.18.42.218", "104.18.33.131", "172.64.145.38", "172.64.145.202", "104.18.42.151"];
-let currentColo = null;
-const getCurrentColo = async () => {
+const traceUrl = 'https://cp.cloudflare.com/cdn-cgi/trace', proxySuffix = '.proxy.zjcloud.us.ci';
+let currentColo = null, pendingPromise = null;
+const getCurrentColo = () => {
     if (currentColo !== null) return currentColo;
-    try {
-        const text = await fetch('https://cp.cloudflare.com/cdn-cgi/trace', {
-            headers: {'User-Agent': 'Mozilla/5.0'}
-        }).then(r => r.text());
-        const i = text.indexOf('colo=');
-        const colo = i >= 0 ? text.slice(i + 5, i + 8) : '';
-        currentColo = colo ? `${colo.toLowerCase()}.proxy.zjcloud.us.ci` : '';
-        return currentColo;
-    } catch {
-        currentColo = null;
-        return '';
-    }
+    if (pendingPromise !== null) return pendingPromise;
+    return pendingPromise = fetch(traceUrl, {signal: AbortSignal.timeout(10)}).then(r => r.text()).then(t => {
+        const i = t.indexOf("colo=");
+        return currentColo = i !== -1 ? t.slice(i + 5, i + 8) + proxySuffix : finallyProxyHost
+    }).catch(() => currentColo = finallyProxyHost).finally(() => {pendingPromise = null})
 };
 const textEncoder = new TextEncoder(), textDecoder = new TextDecoder();
 const panelHtmlUrl = 'https://1345695.github.io/index-404-html/panel';
