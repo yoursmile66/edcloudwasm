@@ -1,9 +1,9 @@
 import {connect} from 'cloudflare:sockets';
 const uuid = 'd342d11e-d424-4583-b36e-524ab1f0afa4';
-const bufferSize = 256 * 1024;
+const bufferSize = 512 * 1024;
 const startThreshold = 50 * 1024 * 1024;
 const maxChunkLen = 64 * 1024;
-const flushTime = 3;
+const flushTime = 4;
 const concurrency = 4;
 const getProxyHost = () => {
     const e = (Math.random() * 65536) | 0;
