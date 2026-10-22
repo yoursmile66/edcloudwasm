@@ -364,7 +364,7 @@ const establishTcpConnection = async (parsedRequest, request) => {
                 } else if (parts.length) {
                     const parsedParams = parts.map(part => {
                         if (t === 1) return parseAuthString(part, 1080);
-                        if (t === 2) return parseAuthString(part, 8080);
+                        if (t === 2) return parseAuthString(part, 80);
                         if (t === 6) return parseAuthString(part, 443);
                         return part;
                     });
