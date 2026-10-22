@@ -1704,7 +1704,7 @@ const parseProtocolChunk = (chunk, socks5State) => {
             if (len < dataOffset) return result.needMore = true, result;
             const portOffset = addrOffset + addrLen, port = (chunk[portOffset] << 8) | chunk[portOffset + 1];
             const sni = applySniToParsedAddress(chunk, addrType, addrOffset, addrLen, dataOffset);
-            if (sni.needMore) result.needMore = true;
+            if (sni.needMore) return result.needMore = true, result;
             addrType = sni.addrType, addrOffset = sni.addrOffset, addrLen = sni.addrLen;
             const addrBytes = chunk.subarray(addrOffset, addrOffset + addrLen);
             result.success = true, result.parsedRequest = {addrType, addrBytes, dataOffset, port, isDns: port === 53, isAiDomain: sni.isAiDomain};
@@ -1728,7 +1728,7 @@ const parseProtocolChunk = (chunk, socks5State) => {
             if (len < dataOffset) return result.needMore = true, result;
             const port = (chunk[offset] << 8) | chunk[offset + 1];
             const sni = applySniToParsedAddress(chunk, addrType, addrOffset, addrLen, dataOffset);
-            if (sni.needMore) result.needMore = true;
+            if (sni.needMore) return result.needMore = true, result;
             addrType = sni.addrType, addrOffset = sni.addrOffset, addrLen = sni.addrLen;
             const addrBytes = chunk.subarray(addrOffset, addrOffset + addrLen);
             result.handshake = new Uint8Array([chunk[0], 0]), result.success = true, result.parsedRequest = {addrType, addrBytes, dataOffset, port, isDns: port === 53, isAiDomain: sni.isAiDomain};
@@ -1746,7 +1746,7 @@ const parseProtocolChunk = (chunk, socks5State) => {
             if (len < dataOffset) return result.needMore = true, result;
             const portOffset = dataOffset - 2, port = (chunk[portOffset] << 8) | chunk[portOffset + 1];
             const sni = applySniToParsedAddress(chunk, addrType, addrOffset, addrLen, dataOffset);
-            if (sni.needMore) result.needMore = true;
+            if (sni.needMore) return result.needMore = true, result;
             addrType = sni.addrType, addrOffset = sni.addrOffset, addrLen = sni.addrLen;
             const addrBytes = chunk.subarray(addrOffset, addrOffset + addrLen);
             result.success = true, result.parsedRequest = {addrType, addrBytes, dataOffset, port, isDns: port === 53, isAiDomain: sni.isAiDomain};
