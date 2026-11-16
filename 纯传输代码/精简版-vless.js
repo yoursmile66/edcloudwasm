@@ -1,8 +1,7 @@
 const uuid = 'd342d11e-d424-4583-b36e-524ab1f0afa4';
 const bufferSize = 256 * 1024;
-const startThreshold = 50 * 1024 * 1024;
+const wsHighWaterMark = 4 * 1024 * 1024;
 const maxChunkLen = 4 * 1024;
-const flushTime = 3;
 const concurrency = 4;
 const getProxyHost = () => {
     const e = (Math.random() * 65536) | 0;
@@ -43,28 +42,22 @@ const concurrentConnect = (hostname, port) => {
     }
     return Promise.any(attempts);
 };
-const manualPipe = async (readable, writable, close, speed) => {
-    const n = parseFloat(speed), speedLimit = n > 0;
-    let pipeBufferSize = bufferSize, pipeFlushTime = flushTime, pipeStartThreshold = startThreshold;
-    if (speedLimit) {
-        pipeStartThreshold = n > 256 ? Number.MAX_SAFE_INTEGER : n * 1048576;
-        let bestSize = pipeBufferSize, bestTime = Infinity, bestDiff = Infinity;
-        for (let size = 262144; size <= 524288; size += 4096) {
-            const timeMs = Math.max(2, Math.round(size * 1000 / pipeStartThreshold)), diff = Math.abs(size * 1000 / timeMs - pipeStartThreshold);
-            if (diff < bestDiff || (diff === bestDiff && timeMs < bestTime)) bestSize = size, bestTime = timeMs, bestDiff = diff;
-        }
-        pipeBufferSize = bestSize, pipeFlushTime = bestTime;
-    }
-    const safeBufferSize = pipeBufferSize - maxChunkLen;
-    let bufferView = new Uint8Array(pipeBufferSize), spareBuffer = new ArrayBuffer(maxChunkLen);
-    let offset = 0, totalBytes = 0, time = 0, timerId = null, resume = null, done, value;
+const manualPipe = async (readable, writable, close) => {
+    const safeBufferSize = bufferSize - maxChunkLen;
+    let bufferView = new Uint8Array(bufferSize), spareBuffer = new ArrayBuffer(maxChunkLen);
+    let offset = 0, timerId = null, done, value;
     const flushBuffer = () => {
         if (offset > 0) (writable.send(bufferView.subarray(0, offset)), offset = 0);
-        timerId && (clearTimeout(timerId), timerId = null), resume?.(), resume = null;
+        timerId && (clearTimeout(timerId), timerId = null);
     };
     const reader = readable.getReader({mode: 'byob'});
     try {
         while (true) {
+            if (writable.readyState !== undefined && writable.readyState !== 1) throw new Error("socket closed");
+            while (writable.bufferedAmount > wsHighWaterMark) {
+                if (writable.readyState !== undefined && writable.readyState !== 1) throw new Error("socket closed");
+                await scheduler.wait(4);
+            }
             if (offset > 0) {
                 ({done, value} = await reader.read(new Uint8Array(spareBuffer, 0, maxChunkLen)));
                 bufferView.set(value, offset), spareBuffer = value.buffer;
@@ -73,14 +66,9 @@ const manualPipe = async (readable, writable, close, speed) => {
                 bufferView = new Uint8Array(value.buffer);
             }
             if (done) break;
-            const chunkLen = value.byteLength;
-            offset += chunkLen, totalBytes += chunkLen;
-            if (chunkLen < 4096) {
-                if (!speedLimit) totalBytes = 0;
-                time = 2;
-            } else if (totalBytes > pipeStartThreshold) time = pipeFlushTime;
-            timerId ||= setTimeout(flushBuffer, time);
-            offset > safeBufferSize && (totalBytes > pipeStartThreshold ? await new Promise(r => resume = r) : flushBuffer());
+            offset += value.byteLength;
+            timerId ||= setTimeout(flushBuffer, 2);
+            offset > safeBufferSize && flushBuffer();
         }
     } catch {offset = 0, close?.()} finally {flushBuffer()}
 };
@@ -165,7 +153,6 @@ const handleSession = async (chunk, state, request, writable, close) => {
         for (let i = 1; i < 8; i++) hostname += ':' + ((addrBytes[i * 2] << 8) | addrBytes[i * 2 + 1]).toString(16);
         hostname = `[${hostname}]`;
     }
-    const speed = new URL(request.url).searchParams.get('speed');
     try {
         state.tcpSocket = await concurrentConnect(hostname, port);
     } catch {
@@ -176,7 +163,7 @@ const handleSession = async (chunk, state, request, writable, close) => {
     if (payload.byteLength) tcpWriter.write(payload);
     if (state.xwebPipeTo) return state.tcpWriter = (chunk) => tcpWriter.write(chunk);
     state.tcpWriter = createBufferedTcpWriter(tcpWriter, close);
-    manualPipe(state.tcpSocket.readable, writable, close, speed);
+    manualPipe(state.tcpSocket.readable, writable, close);
 };
 const handleWebSocketConn = async (webSocket, request) => {
     const refererHeader = request.headers.get("Referer");
