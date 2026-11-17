@@ -33,11 +33,11 @@ const ssAeadPassword = '123456';       // ss协议 aes-128-gcm 密码（notls）
 /**- **警告**: 大小为maxChunkLen的整数倍使用率最高，不然会有空间浪费。*/
 const bufferSize = 256 * 1024;         // 256KB
 /** 下行发送缓冲水位，超过后暂停从TCP读取。*/
-const wsHighWaterMark = 4 * 1024 * 1024; // 4MB
+const wsHighWaterMark = 2 * 1024 * 1024; // 2MB
 /** 从TCP读取的数据块最大大小，改小会成倍增加传输相同流量的cpu开销，同时会因为写满而增加数据进入缓冲区限速的概率*/
 /**- **警告**: 大小必须为2的幂，设置到大于64KB后只会写满写64KB*/
 /**- **警告**: 免费worker设置64KB时传输相同流量cpu开销最低。*/
-const maxChunkLen = 4 * 1024;        // 4KB
+const maxChunkLen = 64 * 1024;        // 64KB
 // ---------------------------------------------------------------------------------
 /** SS AEAD加密时每批并发处理的payload分片数量，length加密开销低，会随payload一起提交。*/
 const ssAeadEncryptCount = 16;
@@ -1972,34 +1972,43 @@ const establishTcpConnection = async (parsedRequest, request) => {
     return null;
 };
 const manualPipe = async (readable, writable, close) => {
-    const safeBufferSize = bufferSize - maxChunkLen;
+    const safeBufferSize = bufferSize - maxChunkLen, checkInterval = wsHighWaterMark >> 1;
     let bufferView = new Uint8Array(bufferSize), spareBuffer = new ArrayBuffer(maxChunkLen);
-    let offset = 0, timerId = null, done, value;
+    let offset = 0, transferred = checkInterval, timerId = null, isReading = false, needsFlush = false, protectFlush = false, done, value;
     const flushBuffer = () => {
+        if (isReading) return needsFlush = true;
         if (offset > 0) (writable.send(bufferView.subarray(0, offset)), offset = 0);
-        timerId && (clearTimeout(timerId), timerId = null);
+        needsFlush = false, protectFlush = false, timerId && (clearTimeout(timerId), timerId = null);
     };
     const reader = readable.getReader({mode: 'byob'});
     try {
         while (true) {
-            if (writable.readyState !== undefined && writable.readyState !== 1) throw new Error("socket closed");
-            while (writable.bufferedAmount > wsHighWaterMark) {
-                if (writable.readyState !== undefined && writable.readyState !== 1) throw new Error("socket closed");
-                await scheduler.wait(4);
+            if (transferred >= checkInterval) {
+                transferred = 0;
+                while (writable.bufferedAmount > wsHighWaterMark) {
+                    if (writable.readyState !== undefined && writable.readyState !== 1) throw new Error("socket closed");
+                    await scheduler.wait(4);
+                }
             }
-            if (offset > 0) {
+            if (offset > 0 && protectFlush) {
                 ({done, value} = await reader.read(new Uint8Array(spareBuffer, 0, maxChunkLen)));
                 bufferView.set(value, offset), spareBuffer = value.buffer;
             } else {
+                isReading = offset > 0;
                 ({done, value} = await reader.read(new Uint8Array(bufferView.buffer, offset, maxChunkLen)));
-                bufferView = new Uint8Array(value.buffer);
+                isReading = false, bufferView = new Uint8Array(value.buffer);
             }
             if (done) break;
-            offset += value.byteLength;
-            timerId ||= setTimeout(flushBuffer, 2);
-            offset > safeBufferSize && flushBuffer();
+            const chunkLen = value.byteLength;
+            offset += chunkLen, transferred += chunkLen;
+            if (needsFlush) {
+                flushBuffer();
+            } else {
+                timerId ||= setTimeout(flushBuffer, 2), protectFlush = chunkLen < maxChunkLen;
+                offset > safeBufferSize && flushBuffer();
+            }
         }
-    } catch {offset = 0, close?.()} finally {flushBuffer()}
+    } catch {offset = 0, close?.()} finally {isReading = false, flushBuffer()}
 };
 const createBufferedTcpWriter = (tcpWriter, close) => {
     const buffer = new Uint8Array(32768);
