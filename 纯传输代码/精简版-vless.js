@@ -1,5 +1,5 @@
 const uuid = 'd342d11e-d424-4583-b36e-524ab1f0afa4';
-const bufferSize = 256 * 1024;
+const bufferSize = 512 * 1024;
 const wsHighWaterMark = 2 * 1024 * 1024;
 const maxChunkLen = 4 * 1024;
 const concurrency = 4;

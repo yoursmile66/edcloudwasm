@@ -4,7 +4,7 @@ const uuid = 'd342d11e-d424-4583-b36e-524ab1f0afa4';
 //**警告**:trojan使用的sha224密钥，需要自己计算，当前设置为密码666的密钥
 //**警告**:trojan使用的sha224密钥计算网址：https://www.lzltool.com/data-sha224
 const passWordSha224 = '509eece82eb6910bebef9af9496092d3244b6c0d69ef3aaa4b12c565';
-const bufferSize = 256 * 1024;
+const bufferSize = 512 * 1024;
 const wsHighWaterMark = 2 * 1024 * 1024;
 const maxChunkLen = 4 * 1024;
 const concurrency = 4;
