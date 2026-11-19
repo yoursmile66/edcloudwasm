@@ -44,7 +44,7 @@ const manualPipe = async (readable, writable, close) => {
     let offset = 0, transferred = checkInterval, timerId = null, isReading = false, needsFlush = false, protectFlush = false, done, value;
     const flushBuffer = () => {
         if (isReading) return needsFlush = true;
-        if (offset > 0) (writable.send(bufferView.subarray(0, offset)), offset = 0);
+        if (offset > 0) (writable.send(bufferView.subarray(0, offset)), transferred += offset, offset = 0);
         needsFlush = false, protectFlush = false, timerId && (clearTimeout(timerId), timerId = null);
     };
     const reader = readable.getReader({mode: 'byob'});
@@ -67,13 +67,8 @@ const manualPipe = async (readable, writable, close) => {
             }
             if (done) break;
             const chunkLen = value.byteLength;
-            offset += chunkLen, transferred += chunkLen;
-            if (needsFlush) {
-                flushBuffer();
-            } else {
-                timerId ||= setTimeout(flushBuffer, 2), protectFlush = chunkLen < maxChunkLen;
-                offset > safeBufferSize && flushBuffer();
-            }
+            offset += chunkLen;
+            needsFlush ? flushBuffer() : timerId ||= setTimeout(flushBuffer, 2), protectFlush = chunkLen < maxChunkLen, offset > safeBufferSize && flushBuffer();
         }
     } catch {offset = 0, close?.()} finally {isReading = false, flushBuffer()}
 };
