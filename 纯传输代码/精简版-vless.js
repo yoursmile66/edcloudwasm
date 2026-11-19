@@ -68,7 +68,7 @@ const manualPipe = async (readable, writable, close) => {
             if (done) break;
             const chunkLen = value.byteLength;
             offset += chunkLen;
-            needsFlush ? flushBuffer() : timerId ||= setTimeout(flushBuffer, 2), protectFlush = chunkLen < maxChunkLen, offset > safeBufferSize && flushBuffer();
+            needsFlush ? flushBuffer() : (timerId ||= setTimeout(flushBuffer, 2), protectFlush = chunkLen < maxChunkLen, offset > safeBufferSize && flushBuffer());
         }
     } catch {offset = 0, close?.()} finally {isReading = false, flushBuffer()}
 };
