@@ -1048,8 +1048,10 @@ const createSstpSession = (username, password) => {
                 if (ppp.code === 1) {
                     const ack = new Uint8Array(ppp.raw);
                     ack[2] = 2;
-                    await write(dataPacket(ack));
-                    if (localLcpDone) await sendAuth();
+                    if (localLcpDone && !authSent) {
+                        authSent = true;
+                        await write(cat(dataPacket(ack), dataPacket(papPacket(packetId++))));
+                    } else await write(dataPacket(ack));
                 } else if (ppp.code === 2) {
                     localLcpDone = true;
                     await sendAuth();
